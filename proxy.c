@@ -1,4 +1,4 @@
- #include <stdio.h>
+#include <stdio.h>
 #include <signal.h>
 
 #include "csapp.h"
@@ -10,7 +10,7 @@ void read_requesthdrs(rio_t *rp, void *buf, int serverfd, char *hostname, char *
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 void parse_uri(char *uri, char *hostname, char *port, char *path);
 
-static const int is_local_test = 1; // 테스트 환경에 따른 도메인&포트 지정을 위한 상수 (0 할당 시 도메인&포트가 고정되어 외부에서 접속 가능)
+static const int is_local_test = 0; // 테스트 환경에 따른 도메인&포트 지정을 위한 상수 (0 할당 시 도메인&포트가 고정되어 외부에서 접속 가능)
 static const char *user_agent_hdr =
     "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 "
     "Firefox/10.0.3\r\n";
@@ -94,7 +94,7 @@ void doit(int clientfd)
 
   /* 1️⃣ -2) Request Line 전송 [🚒 Proxy -> 💻 Server] */
   // Server 소켓 생성
-  serverfd = is_local_test ? Open_clientfd(hostname, port) : Open_clientfd("52.79.234.188", port);
+  serverfd = is_local_test ? Open_clientfd(hostname, port) : Open_clientfd("localhost", port);
   if (serverfd < 0)
   {
     clienterror(serverfd, method, "502", "Bad Gateway", "📍 Failed to establish connection with the end server");
@@ -165,28 +165,66 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
 
 // uri를 `hostname`, `port`, `path`로 파싱하는 함수
 // uri 형태: `http://hostname:port/path` 혹은 `http://hostname/path` (port는 optional)
+// void parse_uri(char *uri, char *hostname, char *port, char *path)
+// {
+//   // host_name의 시작 위치 포인터: '//'가 있으면 //뒤(ptr+2)부터, 없으면 uri 처음부터
+//   char *hostname_ptr = strstr(uri, "//") ? strstr(uri, "//") + 2 : uri;
+//   char *port_ptr = strchr(hostname_ptr, ':'); // port 시작 위치 (없으면 NULL)
+//   char *path_ptr = strchr(hostname_ptr, '/'); // path 시작 위치 (없으면 NULL)
+//   strcpy(path, path_ptr);
+//
+//   sprintf("uri 정보 : %s %s %s\r\n", hostname_ptr , port_ptr, path_ptr);
+//   if (port_ptr) // port 있는 경우
+//   {
+//     strncpy(port, port_ptr + 1, path_ptr - port_ptr - 1);
+//     strncpy(hostname, hostname_ptr, port_ptr - hostname_ptr);
+//   }
+//   else // port 없는 경우
+//   {
+//     if (is_local_test)
+//       strcpy(port, "80"); // port의 기본 값인 80으로 설정
+//     else
+//       strcpy(port, "8000");
+//     strncpy(hostname, hostname_ptr, path_ptr - hostname_ptr);
+//   }
+// }
+
+
 void parse_uri(char *uri, char *hostname, char *port, char *path)
 {
-  // host_name의 시작 위치 포인터: '//'가 있으면 //뒤(ptr+2)부터, 없으면 uri 처음부터
   char *hostname_ptr = strstr(uri, "//") ? strstr(uri, "//") + 2 : uri;
-  char *port_ptr = strchr(hostname_ptr, ':'); // port 시작 위치 (없으면 NULL)
-  char *path_ptr = strchr(hostname_ptr, '/'); // path 시작 위치 (없으면 NULL)
-  strcpy(path, path_ptr);
+  char *port_ptr = strchr(hostname_ptr, ':'); // 포트 시작 위치 (없으면 NULL)
+  char *path_ptr = strchr(hostname_ptr, '/'); // 경로 시작 위치 (없으면 NULL)
 
-  if (port_ptr) // port 있는 경우
+  // path_ptr NULL 체크
+  if (path_ptr == NULL) {
+    strcpy(path, "/"); // 기본 경로 설정
+  } else {
+    strcpy(path, path_ptr);
+  }
+
+  char output[MAXLINE]; // 버퍼 추가
+  sprintf(output, "uri 정보 : %s %s %s\r\n", hostname_ptr, port_ptr ? port_ptr + 1 : "N/A", path_ptr);
+
+  if (port_ptr) // 포트 있는 경우
   {
     strncpy(port, port_ptr + 1, path_ptr - port_ptr - 1);
+    port[path_ptr - port_ptr - 1] = '\0'; // NULL 종료 추가
     strncpy(hostname, hostname_ptr, port_ptr - hostname_ptr);
+    hostname[port_ptr - hostname_ptr] = '\0'; // NULL 종료 추가
   }
-  else // port 없는 경우
+  else // 포트 없는 경우
   {
     if (is_local_test)
-      strcpy(port, "80"); // port의 기본 값인 80으로 설정
+      strcpy(port, "8080"); // 기본 포트 설정
     else
-      strcpy(port, "8000");
+      strcpy(port, "8080");
+
     strncpy(hostname, hostname_ptr, path_ptr - hostname_ptr);
+    hostname[path_ptr - hostname_ptr] = '\0'; // NULL 종료 추가
   }
 }
+
 
 // Request Header를 읽고 Server에 전송하는 함수
 // 필수 헤더가 없는 경우에는 필수 헤더를 추가로 전송

@@ -54,6 +54,7 @@ void doit(int fd) {
   Rio_readinitb(&rio, fd);
   Rio_readlineb(&rio, buf, MAXLINE);
   sscanf(buf, "%s %s %s", method, uri, version);
+  printf("Received request: %s %s %s\n", method, uri, version);
 
   if (strcasecmp(method, "GET")) {  // GET 메소드만 지원
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
@@ -117,7 +118,14 @@ void serve_static(int fd, char *filename, int filesize) {
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
-  sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+  sprintf(buf, "%sContent-type: %s\r\n", buf, filetype);
+
+  // 비디오 파일인 경우 Content-Disposition 헤더 추가
+  if (strstr(filetype, "video/")) {
+    sprintf(buf, "%sContent-Disposition: inline\r\n", buf);
+  }
+
+  sprintf(buf, "%s\r\n", buf);  // 빈 줄로 헤더 종료
   Rio_writen(fd, buf, strlen(buf));
 
   srcfd = Open(filename, O_RDONLY, 0);
@@ -126,6 +134,7 @@ void serve_static(int fd, char *filename, int filesize) {
   Rio_writen(fd, srcp, filesize);
   Munmap(srcp, filesize);
 }
+
 
 void serve_dynamic(int fd, char *filename, char *cgiargs) {
   char buf[MAXLINE], *emptylist[] = { NULL };
@@ -186,6 +195,10 @@ void get_filetype(char *filename, char *filetype) {
     strcpy(filetype, "image/jpeg");
   else if (strstr(filename, ".png"))
     strcpy(filetype, "image/png");
+  else if (strstr(filename, ".mpg"))   // mpg 파일 형식 추가
+    strcpy(filetype, "video/mpeg");
+  else if (strstr(filename, ".mp4"))   // mp4 파일 형식 추가
+    strcpy(filetype, "video/mp4");
   else
     strcpy(filetype, "text/plain");
 }
